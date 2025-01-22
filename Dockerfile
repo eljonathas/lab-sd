@@ -1,0 +1,3 @@
+FROM zookeeper:3.7
+
+EXPOSE 2181
