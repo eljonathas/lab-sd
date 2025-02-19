@@ -1,30 +1,4 @@
-import sys
-from lib.sync_primitive import SyncPrimitive
-import time
-
-class Queue(SyncPrimitive):
-    def __init__(self, address, root):
-        super().__init__(address)
-        self.root = root
-        self._ensure_root()
-
-    def _ensure_root(self):
-        self.zk.ensure_path(self.root)
-
-    def produce(self, value):
-        self.zk.create(f"{self.root}/element-", str(value).encode(), sequence=True)
-
-    def consume(self):
-        while True:
-            children = self.zk.get_children(self.root)
-            if not children:
-                time.sleep(1)
-                continue
-            sorted_children = sorted(children)
-            first_child = sorted_children[0]
-            data, _ = self.zk.get(f"{self.root}/{first_child}")
-            self.zk.delete(f"{self.root}/{first_child}")
-            return int(data.decode())
+from lib.queue import Queue
 
 def main():
     if len(sys.argv) != 5:

@@ -3,48 +3,37 @@ import uuid
 from lib.base_barrier import BaseBarrier
 from lib.sync_primitive import SyncPrimitive
 
-# barreira dupla para sincronizar a entrada e a saída de participantes.
 class DoubleBarrier(BaseBarrier):
     def __init__(self, address, root, size):
-        # 'root' é o caminho do nó que conterá os nós dos participantes;
-        # 'size' é o número total esperado de participantes.
-        super().__init__(address, root)
-        self.size = size
+        super().__init__(address, root)  # Inicializa a conexão com o ZooKeeper e o nó raiz
+        self.size = size  # Número de participantes esperados
         self.node_path = None  # Caminho do nó efêmero deste participante
 
     def enter(self):
-        # registra este participante criando um nó efêmero com identificador único
-        hostname = socket.gethostname()
-        unique_id = f"{hostname}-{uuid.uuid4()}"
-        self.node_path = f"{self.path}/{unique_id}"
-        self.zk.create(self.node_path, ephemeral=True)
+        hostname = socket.gethostname()  # Obtém o nome do host
+        unique_id = f"{hostname}-{uuid.uuid4()}"  # Gera um ID único para o participante
+        self.node_path = f"{self.path}/{unique_id}"  # Define o caminho do nó efêmero
+        self.zk.create(self.node_path, ephemeral=True)  # Cria o nó efêmero no ZooKeeper
 
-        # espera até que o número de participantes seja igual ou superior a self.size
         while True:
             with SyncPrimitive._mutex:
-                children = self.zk.get_children(self.path, watch=self._watch_callback)
+                children = self.zk.get_children(self.path, watch=self._watch_callback)  # Obtém os nós filhos
                 if len(children) < self.size:
-                    # ainda não atingiu o número esperado; aguarda notificação
-                    SyncPrimitive._mutex.wait()
+                    SyncPrimitive._mutex.wait()  # Aguarda notificação se o número de participantes for insuficiente
                 else:
-                    # número esperado de participantes atingido; libera a execução
-                    return True
+                    return True  # Todos os participantes entraram na barreira
 
     def leave(self):
-        # remove o nó efêmero deste participante para sinalizar sua saída
         if self.node_path:
             with SyncPrimitive._mutex:
                 if self.zk.exists(self.node_path):
-                    self.zk.delete(self.node_path)
-                SyncPrimitive._mutex.notify_all()
+                    self.zk.delete(self.node_path)  # Remove o nó efêmero deste participante
+                SyncPrimitive._mutex.notify_all()  # Notifica todas as threads em espera
 
-        # aguarda até que nenhum participante permaneça (todos saíram)
         while True:
             with SyncPrimitive._mutex:
-                children = self.zk.get_children(self.path, watch=self._watch_callback)
+                children = self.zk.get_children(self.path, watch=self._watch_callback)  # Obtém os nós filhos
                 if len(children) > 0:
-                    # ainda existem nós de participantes; aguarda notificação
-                    SyncPrimitive._mutex.wait()
+                    SyncPrimitive._mutex.wait()  # Aguarda notificação se ainda houver participantes
                 else:
-                    # todos os participantes saíram; finaliza o método
-                    return True
+                    return True  # Todos os participantes saíram da barreira
